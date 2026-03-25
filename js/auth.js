@@ -42,9 +42,18 @@ async function doLogin() {
   if (!email || !password) { errEl.textContent = 'Veuillez remplir tous les champs.'; errEl.style.display = 'block'; return; }
   const btn = document.querySelector('#login-screen .btn-gold');
   btn.textContent = 'Connexion...'; btn.disabled = true;
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) {
-    errEl.textContent = 'Email ou mot de passe incorrect.';
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      errEl.textContent = 'Email ou mot de passe incorrect. (' + error.message + ')';
+      errEl.style.display = 'block';
+      btn.textContent = 'Se connecter'; btn.disabled = false;
+    } else if (data?.user) {
+      Auth.currentUser = data.user;
+      Auth.onLogin();
+    }
+  } catch(e) {
+    errEl.textContent = 'Erreur de connexion: ' + e.message;
     errEl.style.display = 'block';
     btn.textContent = 'Se connecter'; btn.disabled = false;
   }
