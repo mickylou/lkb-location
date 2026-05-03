@@ -6,15 +6,31 @@ const Auth = {
   currentUser: null,
 
   async init() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      this.currentUser = session.user;
-      this.onLogin();
-    } else {
+    // Attend que supabase soit initialisé
+    let waited = 0;
+    while (!supabase && waited < 5000) {
+      await new Promise(r => setTimeout(r, 100));
+      waited += 100;
+    }
+    if (!supabase) {
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('login-error').textContent = 'Erreur: impossible de contacter Supabase.';
+      document.getElementById('login-error').style.display = 'block';
+      return;
+    }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        this.currentUser = session.user;
+        this.onLogin();
+      } else {
+        document.getElementById('login-screen').style.display = 'flex';
+      }
+    } catch(e) {
       document.getElementById('login-screen').style.display = 'flex';
     }
     supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN') { this.currentUser = session.user; this.onLogin(); }
+      if (event === 'SIGNED_IN' && session) { this.currentUser = session.user; this.onLogin(); }
       if (event === 'SIGNED_OUT') { this.onLogout(); }
     });
   },
@@ -22,8 +38,7 @@ const Auth = {
   onLogin() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
-    const email = this.currentUser?.email || '';
-    document.getElementById('current-admin').textContent = email;
+    document.getElementById('current-admin').textContent = this.currentUser?.email || '';
     App.init();
   },
 
@@ -38,16 +53,33 @@ async function doLogin() {
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
-  errEl.style.display = 'none';
-  if (!email || !password) { errEl.textContent = 'Veuillez remplir tous les champs.'; errEl.style.display = 'block'; return; }
   const btn = document.querySelector('#login-screen .btn-gold');
-  btn.textContent = 'Connexion...'; btn.disabled = true;
+  errEl.style.display = 'none';
+  if (!email || !password) {
+    errEl.textContent = 'Veuillez remplir tous les champs.';
+    errEl.style.display = 'block';
+    return;
+  }
+  // Attend que supabase soit prêt
+  let waited = 0;
+  while (!supabase && waited < 5000) {
+    await new Promise(r => setTimeout(r, 100));
+    waited += 100;
+  }
+  if (!supabase) {
+    errEl.textContent = 'Erreur: Supabase non disponible. Vérifiez votre connexion internet.';
+    errEl.style.display = 'block';
+    return;
+  }
+  btn.textContent = 'Connexion...';
+  btn.disabled = true;
   try {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      errEl.textContent = 'Email ou mot de passe incorrect. (' + error.message + ')';
+      errEl.textContent = 'Email ou mot de passe incorrect.';
       errEl.style.display = 'block';
-      btn.textContent = 'Se connecter'; btn.disabled = false;
+      btn.textContent = 'Se connecter';
+      btn.disabled = false;
     } else if (data?.user) {
       Auth.currentUser = data.user;
       Auth.onLogin();
@@ -55,15 +87,15 @@ async function doLogin() {
   } catch(e) {
     errEl.textContent = 'Erreur de connexion: ' + e.message;
     errEl.style.display = 'block';
-    btn.textContent = 'Se connecter'; btn.disabled = false;
+    btn.textContent = 'Se connecter';
+    btn.disabled = false;
   }
 }
 
 async function doLogout() {
-  await supabase.auth.signOut();
+  if (supabase) await supabase.auth.signOut();
 }
 
-// Enter key on login
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-password')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
