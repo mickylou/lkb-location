@@ -1,26 +1,30 @@
 // ============================================================
 // LKB LOCATION — Configuration Supabase
-// ⚠ REMPLIR avec vos credentials Supabase
-//   Dashboard Supabase → Settings → API
 // ============================================================
 
-const SUPABASE_URL = 'https://fwlyaikeroxxhqaihkbf.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3bHlhaWtlcm94eGhxYWloa2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyNjg1MzgsImV4cCI6MjA4OTg0NDUzOH0.7I5zq_Zxenp87M71Qv5ZwFzSSsIeNOoij6NQGhZL4uE';
+const SUPABASE_URL = 'https://zchokerouwajyiqigknx.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpjaG9rZXJvdXdhanlpcWlna254Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MTYxODEsImV4cCI6MjA5MzM5MjE4MX0.93XxssR_LhJpf6bgEheLwLWk3lGN5ZVC6jC_n1BEoZc';
 
-// Initialisation du client Supabase
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  realtime: { params: { eventsPerSecond: 10 } }
-});
+// Initialisation Supabase (attend que la lib CDN soit chargée)
+let supabase;
+function _initSupabase() {
+  if (window.supabase && window.supabase.createClient) {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      realtime: { params: { eventsPerSecond: 10 } }
+    });
+    return true;
+  }
+  return false;
+}
+if (!_initSupabase()) {
+  let _tries = 0;
+  const _iv = setInterval(() => {
+    if (_initSupabase() || _tries++ > 50) clearInterval(_iv);
+  }, 100);
+}
 
-// Numérotation contrats
-const PREFIXES = {
-  reservation: 'LC',
-  facture: 'FAC',
-  sinistre: 'SIN',
-  avoir: 'AV',
-};
+const PREFIXES = { reservation:'LC', facture:'FAC', sinistre:'SIN', avoir:'AV' };
 
-// Infos société (imprimés sur les docs)
 const SOCIETE = {
   nom: 'LKB Location',
   siret: '123 456 789 00012',
