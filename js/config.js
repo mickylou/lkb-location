@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 // La lib Supabase CDN expose window.supabase avec createClient
 // On crée notre client et on l'expose globalement
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+window._supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
 });
 
@@ -25,3 +25,4 @@ const SOCIETE = {
   tva_intracom: 'FR12 123456789',
   taux_tva: 20,
 };
+var supabase = window._supabase;
