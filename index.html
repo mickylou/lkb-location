@@ -10,12 +10,9 @@
 <meta name="apple-mobile-web-app-title" content="LKB Location">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css">
-<!-- Supabase chargé en premier, de manière synchrone -->
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
-
-<!-- LOGIN SCREEN -->
 <div id="login-screen">
   <div class="login-box">
     <div class="login-logo">
@@ -28,20 +25,13 @@
     </div>
     <div class="login-title">Espace Administrateur</div>
     <div id="login-error" class="login-error" style="display:none;"></div>
-    <div class="form-group">
-      <label>Email</label>
-      <input type="email" id="login-email" placeholder="admin@lkblocation.fr" autocomplete="email">
-    </div>
-    <div class="form-group">
-      <label>Mot de passe</label>
-      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
-    </div>
+    <div class="form-group"><label>Email</label><input type="email" id="login-email" placeholder="admin@lkblocation.fr" autocomplete="email"></div>
+    <div class="form-group"><label>Mot de passe</label><input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password"></div>
     <button class="btn btn-gold" style="width:100%;margin-top:8px;" onclick="doLogin()">Se connecter</button>
     <div class="login-footer">LKB Location © 2025 — Accès réservé</div>
   </div>
 </div>
-
-<!-- MAIN APP -->
+<div id="sidebar-overlay" onclick="closeSidebar()"></div>
 <div id="app" style="display:none;">
 <nav id="sidebar">
   <div class="sidebar-logo">
@@ -53,40 +43,39 @@
     </svg>
     <div class="tagline">Gestion Professionnelle</div>
   </div>
-  <div class="sync-bar" id="sync-bar">
-    <span class="sync-dot" id="sync-dot"></span>
-    <span id="sync-label">Synchronisé</span>
-  </div>
+  <div class="sync-bar" id="sync-bar"><span class="sync-dot" id="sync-dot"></span><span id="sync-label">Synchronisé</span></div>
   <div class="sidebar-nav">
     <div class="nav-section">Principal</div>
-    <div class="nav-item active" onclick="showPage('dashboard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Tableau de bord</div>
-    <div class="nav-item" onclick="showPage('planning')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Planning</div>
+    <div class="nav-item active" onclick="showPage('dashboard');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Tableau de bord</div>
+    <div class="nav-item" onclick="showPage('planning');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Planning</div>
     <div class="nav-section">Locations</div>
-    <div class="nav-item" onclick="showPage('reservations')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Réservations & Contrats</div>
-    <div class="nav-item" onclick="showPage('edl')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>États des lieux</div>
+    <div class="nav-item" onclick="showPage('reservations');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Réservations & Contrats</div>
+    <div class="nav-item" onclick="showPage('edl');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>États des lieux</div>
     <div class="nav-section">Flotte</div>
-    <div class="nav-item" onclick="showPage('vehicules')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>Véhicules</div>
-    <div class="nav-item" onclick="showPage('maintenance')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>Entretien & Alertes</div>
+    <div class="nav-item" onclick="showPage('vehicules');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>Véhicules</div>
+    <div class="nav-item" onclick="showPage('maintenance');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>Entretien & Alertes</div>
     <div class="nav-section">Clients & Docs</div>
-    <div class="nav-item" onclick="showPage('clients')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Clients & Conducteurs</div>
-    <div class="nav-item" onclick="showPage('documents')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>Documents</div>
+    <div class="nav-item" onclick="showPage('clients');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Clients & Conducteurs</div>
+    <div class="nav-item" onclick="showPage('documents');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>Documents</div>
     <div class="nav-section">Finances</div>
-    <div class="nav-item" onclick="showPage('facturation')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Facturation</div>
-    <div class="nav-item" onclick="showPage('comptabilite')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Comptabilité</div>
+    <div class="nav-item" onclick="showPage('facturation');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Facturation</div>
+    <div class="nav-item" onclick="showPage('comptabilite');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Comptabilité</div>
     <div class="nav-section">Partenaires & +</div>
-    <div class="nav-item" onclick="showPage('proprietaires')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Propriétaires</div>
-    <div class="nav-item" onclick="showPage('sinistres')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Sinistres</div>
-    <div class="nav-item" onclick="showPage('parametres')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Paramètres</div>
+    <div class="nav-item" onclick="showPage('proprietaires');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Propriétaires</div>
+    <div class="nav-item" onclick="showPage('sinistres');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Sinistres</div>
+    <div class="nav-item" onclick="showPage('parametres');closeSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Paramètres</div>
   </div>
   <div class="sidebar-bottom">
     <div style="color:var(--gold);font-weight:600;font-size:12px;">LKB Location</div>
-    <div id="current-admin" style="font-size:11px;margin-top:2px;color:#888;">—</div>
-    <button onclick="doLogout()" style="margin-top:8px;background:none;border:1px solid #333;color:#666;padding:5px 12px;cursor:pointer;font-size:10px;border-radius:2px;letter-spacing:1px;">DÉCONNEXION</button>
+    <div id="current-admin" style="font-size:11px;margin-top:2px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</div>
+    <button onclick="doLogout()" style="margin-top:8px;background:none;border:1px solid #333;color:#666;padding:5px 12px;cursor:pointer;font-size:10px;border-radius:2px;letter-spacing:1px;width:100%;">DÉCONNEXION</button>
   </div>
 </nav>
-
 <div id="main">
   <div id="topbar">
+    <button id="menu-toggle" onclick="toggleSidebar()" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
     <div>
       <div class="topbar-title" id="page-title">Tableau de bord</div>
       <div class="topbar-sub" id="page-sub">Vue d'ensemble — LKB Location</div>
@@ -112,11 +101,8 @@
   </div>
 </div>
 </div>
-
 <div id="modals-container"></div>
 <div id="toast-container" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;"></div>
-
-<!-- Tous les scripts à la fin du body -->
 <script src="js/config.js"></script>
 <script src="js/db.js"></script>
 <script src="js/auth.js"></script>
@@ -136,11 +122,9 @@
 <script src="js/pages/parametres.js"></script>
 <script src="js/app.js"></script>
 <script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
-}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sidebar-overlay').classList.toggle('active');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebar-overlay').classList.remove('active');}
+if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./sw.js').catch(()=>{});});}
 </script>
 </body>
 </html>
