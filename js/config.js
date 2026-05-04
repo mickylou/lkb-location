@@ -5,23 +5,11 @@
 const SUPABASE_URL = 'https://zchokerouwajyiqigknx.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpjaG9rZXJvdXdhanlpcWlna254Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MTYxODEsImV4cCI6MjA5MzM5MjE4MX0.93XxssR_LhJpf6bgEheLwLWk3lGN5ZVC6jC_n1BEoZc';
 
-// Initialisation Supabase (attend que la lib CDN soit chargée)
-let supabase;
-function _initSupabase() {
-  if (window.supabase && window.supabase.createClient) {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      realtime: { params: { eventsPerSecond: 10 } }
-    });
-    return true;
-  }
-  return false;
-}
-if (!_initSupabase()) {
-  let _tries = 0;
-  const _iv = setInterval(() => {
-    if (_initSupabase() || _tries++ > 50) clearInterval(_iv);
-  }, 100);
-}
+// La lib Supabase CDN expose window.supabase avec createClient
+// On crée notre client et on l'expose globalement
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  realtime: { params: { eventsPerSecond: 10 } }
+});
 
 const PREFIXES = { reservation:'LC', facture:'FAC', sinistre:'SIN', avoir:'AV' };
 
