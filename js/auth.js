@@ -6,18 +6,6 @@ const Auth = {
   currentUser: null,
 
   async init() {
-    // Attend que supabase soit initialisé
-    let waited = 0;
-    while (!supabase && waited < 5000) {
-      await new Promise(r => setTimeout(r, 100));
-      waited += 100;
-    }
-    if (!supabase) {
-      document.getElementById('login-screen').style.display = 'flex';
-      document.getElementById('login-error').textContent = 'Erreur: impossible de contacter Supabase.';
-      document.getElementById('login-error').style.display = 'block';
-      return;
-    }
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
@@ -28,6 +16,7 @@ const Auth = {
       }
     } catch(e) {
       document.getElementById('login-screen').style.display = 'flex';
+      console.error('Auth init error:', e);
     }
     supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) { this.currentUser = session.user; this.onLogin(); }
@@ -60,17 +49,6 @@ async function doLogin() {
     errEl.style.display = 'block';
     return;
   }
-  // Attend que supabase soit prêt
-  let waited = 0;
-  while (!supabase && waited < 5000) {
-    await new Promise(r => setTimeout(r, 100));
-    waited += 100;
-  }
-  if (!supabase) {
-    errEl.textContent = 'Erreur: Supabase non disponible. Vérifiez votre connexion internet.';
-    errEl.style.display = 'block';
-    return;
-  }
   btn.textContent = 'Connexion...';
   btn.disabled = true;
   try {
@@ -85,7 +63,7 @@ async function doLogin() {
       Auth.onLogin();
     }
   } catch(e) {
-    errEl.textContent = 'Erreur de connexion: ' + e.message;
+    errEl.textContent = 'Erreur: ' + e.message;
     errEl.style.display = 'block';
     btn.textContent = 'Se connecter';
     btn.disabled = false;
@@ -93,7 +71,7 @@ async function doLogin() {
 }
 
 async function doLogout() {
-  if (supabase) await supabase.auth.signOut();
+  await supabase.auth.signOut();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
