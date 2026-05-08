@@ -14,10 +14,14 @@ const DB = {
     if (error) throw error; return data;
   },
   async saveVehicule(v) {
-    const { data, error } = v.id
-      ? await supabase.from('vehicules').update(v).eq('id', v.id).select().single()
-      : await supabase.from('vehicules').insert(v).select().single();
-    if (error) throw error; return data;
+    const id = v.id;
+    if (id) {
+      const { data, error } = await supabase.from('vehicules').update(v).eq('id', id).select();
+      if (error) throw error; return data[0];
+    } else {
+      const { data, error } = await supabase.from('vehicules').insert(v).select();
+      if (error) throw error; return data[0];
+    }
   },
   async deleteVehicule(id) {
     const { error } = await supabase.from('vehicules').delete().eq('id', id);
@@ -38,16 +42,20 @@ const DB = {
     if (error) throw error; return data;
   },
   async saveClient(c) {
-    const { data, error } = c.id
-      ? await supabase.from('clients').update(c).eq('id', c.id).select().single()
-      : await supabase.from('clients').insert(c).select().single();
-    if (error) throw error; return data;
+    const id = c.id;
+    if (id) {
+      const { data, error } = await supabase.from('clients').update(c).eq('id', id).select();
+      if (error) throw error; return data[0];
+    } else {
+      const { data, error } = await supabase.from('clients').insert(c).select();
+      if (error) throw error; return data[0];
+    }
   },
 
   // ---- RÉSERVATIONS ----
   async getReservations(filters = {}) {
     let q = supabase.from('reservations').select(`
-      *, 
+      *,
       vehicules(marque, modele, immatriculation, type_propriete, tarif_jour),
       clients(civilite, nom, prenom, email, telephone)
     `).order('date_depart', { ascending: false });
@@ -57,21 +65,60 @@ const DB = {
     if (error) throw error; return data;
   },
   async getReservation(id) {
-    const { data, error } = await supabase.from('reservations').select(`
-      *, vehicules(*), clients(*)
-    `).eq('id', id).single();
+    const { data, error } = await supabase.from('reservations').select(`*, vehicules(*), clients(*)`).eq('id', id).single();
     if (error) throw error; return data;
   },
   async saveReservation(r) {
-    const { data, error } = r.id
-      ? await supabase.from('reservations').update(r).eq('id', r.id).select().single()
-      : await supabase.from('reservations').insert(r).select().single();
-    if (error) throw error; return data;
+    const id = r.id;
+    if (id) {
+      const { data, error } = await supabase.from('reservations').update(r).eq('id', r.id).select();
+      if (error) throw error; return data[0];
+    } else {
+      const { data, error } = await supabase.from('reservations').insert(r).select();
+      if (error) throw error; return data[0];
+    }
+  },
+  async cloturerReservation(id, kmRetour, frais) {
+    // 1. Clôturer la réservation
+    const { data: resData, error: resError } = await supabase.from('reservations')
+      .update({ statut: 'cloture', km_retour: kmRetour, date_retour_effective: new Date().toISOString() })
+      .eq('id', id).select();
+    if (resError) throw resError;
+    const res = resData[0];
+
+    // 2. Mettre à jour KM véhicule
+    if (kmRetour && res.vehicule_id) {
+      await supabase.from('vehicules').update({ km_actuel: kmRetour, statut: 'dispo' }).eq('id', res.vehicule_id);
+    }
+
+    // 3. Enregistrer frais supplémentaires
+    if (frais && frais.length > 0) {
+      const fraisData = frais.map(f => ({ ...f, reservation_id: id }));
+      await supabase.from('frais_retour').insert(fraisData);
+      // Ajouter écritures comptables pour chaque frais
+      for (const f of frais) {
+        await supabase.from('journal_comptable').insert({
+          date_operation: new Date().toISOString().split('T')[0],
+          libelle: `Frais retour ${id} — ${f.type_frais}`,
+          categorie: 'Frais retour',
+          reference: id,
+          credit: f.montant,
+          reservation_id: id,
+        });
+      }
+    }
+    return res;
   },
   async nextReservationId() {
     const year = new Date().getFullYear();
     const { count } = await supabase.from('reservations').select('*', { count: 'exact', head: true }).like('id', `LC-${year}-%`);
     return `LC-${year}-${String((count || 0) + 1).padStart(3, '0')}`;
+  },
+
+  // ---- FRAIS RETOUR ----
+  async getFraisRetour(reservationId) {
+    const { data, error } = await supabase.from('frais_retour').select('*').eq('reservation_id', reservationId);
+    if (error) throw error; return data;
   },
 
   // ---- EDL ----
@@ -86,8 +133,8 @@ const DB = {
     if (error) throw error; return data;
   },
   async saveEDL(edl) {
-    const { data, error } = await supabase.from('etats_des_lieux').insert(edl).select().single();
-    if (error) throw error; return data;
+    const { data, error } = await supabase.from('etats_des_lieux').insert(edl).select();
+    if (error) throw error; return data[0];
   },
 
   // ---- MAINTENANCE ----
@@ -96,16 +143,16 @@ const DB = {
     if (error) throw error; return data;
   },
   async saveMaintenance(m) {
-    const { data, error } = await supabase.from('maintenances').insert(m).select().single();
-    if (error) throw error; return data;
+    const { data, error } = await supabase.from('maintenances').insert(m).select();
+    if (error) throw error; return data[0];
   },
   async getAlertes() {
     const { data, error } = await supabase.from('alertes_entretien').select('*, vehicules(marque,modele)').eq('statut', 'actif').order('echeance_date');
     if (error) throw error; return data;
   },
   async saveAlerte(a) {
-    const { data, error } = await supabase.from('alertes_entretien').insert(a).select().single();
-    if (error) throw error; return data;
+    const { data, error } = await supabase.from('alertes_entretien').insert(a).select();
+    if (error) throw error; return data[0];
   },
 
   // ---- DOCUMENTS ----
@@ -117,8 +164,8 @@ const DB = {
     if (error) throw error; return data;
   },
   async saveDocument(d) {
-    const { data, error } = await supabase.from('documents').insert(d).select().single();
-    if (error) throw error; return data;
+    const { data, error } = await supabase.from('documents').insert(d).select();
+    if (error) throw error; return data[0];
   },
 
   // ---- FACTURES ----
@@ -127,10 +174,14 @@ const DB = {
     if (error) throw error; return data;
   },
   async saveFacture(f) {
-    const { data, error } = f.id
-      ? await supabase.from('factures').update(f).eq('id', f.id).select().single()
-      : await supabase.from('factures').insert(f).select().single();
-    if (error) throw error; return data;
+    const id = f.id;
+    if (id) {
+      const { data, error } = await supabase.from('factures').update(f).eq('id', id).select();
+      if (error) throw error; return data[0];
+    } else {
+      const { data, error } = await supabase.from('factures').insert(f).select();
+      if (error) throw error; return data[0];
+    }
   },
   async nextFactureId() {
     const year = new Date().getFullYear();
@@ -150,8 +201,9 @@ const DB = {
     if (error) throw error; return data;
   },
   async addEcriture(e) {
-    const { data, error } = await supabase.from('journal_comptable').insert({ ...e, created_by: (await supabase.auth.getUser()).data.user?.id }).select().single();
-    if (error) throw error; return data;
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase.from('journal_comptable').insert({ ...e, created_by: user?.id }).select();
+    if (error) throw error; return data[0];
   },
 
   // ---- PROPRIÉTAIRES ----
@@ -160,10 +212,14 @@ const DB = {
     if (error) throw error; return data;
   },
   async saveProprietaire(p) {
-    const { data, error } = p.id
-      ? await supabase.from('proprietaires').update(p).eq('id', p.id).select().single()
-      : await supabase.from('proprietaires').insert(p).select().single();
-    if (error) throw error; return data;
+    const id = p.id;
+    if (id) {
+      const { data, error } = await supabase.from('proprietaires').update(p).eq('id', id).select();
+      if (error) throw error; return data[0];
+    } else {
+      const { data, error } = await supabase.from('proprietaires').insert(p).select();
+      if (error) throw error; return data[0];
+    }
   },
 
   // ---- SINISTRES ----
@@ -172,10 +228,25 @@ const DB = {
     if (error) throw error; return data;
   },
   async saveSinistre(s) {
-    const { data, error } = s.id
-      ? await supabase.from('sinistres').update(s).eq('id', s.id).select().single()
-      : await supabase.from('sinistres').insert(s).select().single();
-    if (error) throw error; return data;
+    const id = s.id;
+    if (id) {
+      const { data, error } = await supabase.from('sinistres').update(s).eq('id', id).select();
+      if (error) throw error; return data[0];
+    } else {
+      const { data, error } = await supabase.from('sinistres').insert(s).select();
+      if (error) throw error; return data[0];
+    }
+  },
+
+  // ---- PARAMÈTRES ----
+  async getParametres() {
+    const { data, error } = await supabase.from('parametres').select('*').eq('id', 'societe').single();
+    if (error) return null;
+    return data;
+  },
+  async saveParametres(p) {
+    const { data, error } = await supabase.from('parametres').upsert({ ...p, id: 'societe', updated_at: new Date().toISOString() }).select();
+    if (error) throw error; return data[0];
   },
 
   // ---- STATS DASHBOARD ----
