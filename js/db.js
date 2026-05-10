@@ -32,6 +32,56 @@ const DB = {
     if (error) throw error;
   },
 
+  // ---- DÉGÂTS VÉHICULE ----
+  async getDegatsVehicule(vehiculeId) {
+    const { data, error } = await supabase.from('degats_vehicule').select('*').eq('vehicule_id', vehiculeId).order('numero');
+    if (error) throw error; return data;
+  },
+  async saveDegat(d) {
+    const id = d.id;
+    if (id) {
+      const { data, error } = await supabase.from('degats_vehicule').update(d).eq('id', id).select();
+      if (error) throw error; return data[0];
+    } else {
+      const { data, error } = await supabase.from('degats_vehicule').insert(d).select();
+      if (error) throw error; return data[0];
+    }
+  },
+  async deleteDegat(id) {
+    const { error } = await supabase.from('degats_vehicule').delete().eq('id', id);
+    if (error) throw error;
+  },
+  async addDegatsFromRetour(vehiculeId, reservationId, dommages) {
+    if (!dommages || dommages.length === 0) return;
+    // Récupérer le numéro max existant
+    const { data: existing } = await supabase.from('degats_vehicule').select('numero').eq('vehicule_id', vehiculeId).order('numero', { ascending: false }).limit(1);
+    let maxNum = existing && existing.length > 0 ? existing[0].numero : 0;
+    for (const d of dommages) {
+      maxNum++;
+      await supabase.from('degats_vehicule').insert({
+        vehicule_id: vehiculeId,
+        face: d.face || 'front',
+        x: d.x || 50,
+        y: d.y || 50,
+        numero: maxNum,
+        description: d.description || d.label || '',
+        photo_url: d.photoUrl || null,
+        source: 'retour',
+        reservation_id: reservationId,
+      });
+    }
+  },
+
+  // ---- FACES VÉHICULE ----
+  async getVehiculeFaces(vehiculeId) {
+    const { data, error } = await supabase.from('vehicule_faces').select('*').eq('vehicule_id', vehiculeId);
+    if (error) throw error; return data || [];
+  },
+  async saveVehiculeFace(vehiculeId, face, photoUrl) {
+    const { error } = await supabase.from('vehicule_faces').upsert({ vehicule_id: vehiculeId, face, photo_url: photoUrl, updated_at: new Date().toISOString() }, { onConflict: 'vehicule_id,face' });
+    if (error) throw error;
+  },
+
   // ---- CLIENTS ----
   async getClients() {
     const { data, error } = await supabase.from('clients').select('*').order('nom');
@@ -54,11 +104,7 @@ const DB = {
 
   // ---- RÉSERVATIONS ----
   async getReservations(filters = {}) {
-    let q = supabase.from('reservations').select(`
-      *,
-      vehicules(marque, modele, immatriculation, type_propriete, tarif_jour),
-      clients(civilite, nom, prenom, email, telephone)
-    `).order('date_depart', { ascending: false });
+    let q = supabase.from('reservations').select(`*, vehicules(marque, modele, immatriculation, type_propriete, tarif_jour), clients(civilite, nom, prenom, email, telephone)`).order('date_depart', { ascending: false });
     if (filters.statut) q = q.eq('statut', filters.statut);
     if (filters.vehicule_id) q = q.eq('vehicule_id', filters.vehicule_id);
     const { data, error } = await q;
@@ -78,34 +124,24 @@ const DB = {
       if (error) throw error; return data[0];
     }
   },
-  async cloturerReservation(id, kmRetour, frais) {
-    // 1. Clôturer la réservation
+  async cloturerReservation(id, kmRetour, frais, nouveauxDommages) {
     const { data: resData, error: resError } = await supabase.from('reservations')
       .update({ statut: 'cloture', km_retour: kmRetour, date_retour_effective: new Date().toISOString() })
       .eq('id', id).select();
     if (resError) throw resError;
     const res = resData[0];
-
-    // 2. Mettre à jour KM véhicule
     if (kmRetour && res.vehicule_id) {
       await supabase.from('vehicules').update({ km_actuel: kmRetour, statut: 'dispo' }).eq('id', res.vehicule_id);
     }
-
-    // 3. Enregistrer frais supplémentaires
     if (frais && frais.length > 0) {
-      const fraisData = frais.map(f => ({ ...f, reservation_id: id }));
-      await supabase.from('frais_retour').insert(fraisData);
-      // Ajouter écritures comptables pour chaque frais
+      await supabase.from('frais_retour').insert(frais.map(f => ({ ...f, reservation_id: id })));
       for (const f of frais) {
-        await supabase.from('journal_comptable').insert({
-          date_operation: new Date().toISOString().split('T')[0],
-          libelle: `Frais retour ${id} — ${f.type_frais}`,
-          categorie: 'Frais retour',
-          reference: id,
-          credit: f.montant,
-          reservation_id: id,
-        });
+        await supabase.from('journal_comptable').insert({ date_operation: new Date().toISOString().split('T')[0], libelle: `Frais retour ${id} — ${f.type_frais}`, categorie: 'Frais retour', reference: id, credit: f.montant, reservation_id: id, vehicule_id: res.vehicule_id });
       }
+    }
+    // Ajouter les nouveaux dommages à l'état du véhicule
+    if (nouveauxDommages && nouveauxDommages.length > 0 && res.vehicule_id) {
+      await this.addDegatsFromRetour(res.vehicule_id, id, nouveauxDommages);
     }
     return res;
   },
@@ -127,9 +163,7 @@ const DB = {
     if (error) throw error; return data;
   },
   async getAllEDLs() {
-    const { data, error } = await supabase.from('etats_des_lieux').select(`
-      *, reservations(id, vehicules(marque, modele), clients(nom, prenom))
-    `).order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('etats_des_lieux').select(`*, reservations(id, vehicules(marque, modele), clients(nom, prenom))`).order('created_at', { ascending: false });
     if (error) throw error; return data;
   },
   async saveEDL(edl) {
