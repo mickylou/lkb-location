@@ -10,7 +10,10 @@ Pages.vehicules = async function(filter = 'all') {
       ${['all','dispo','loue','maint'].map(f=>`<button class="btn btn-outline btn-sm" onclick="Pages.vehicules('${f}')">${{all:'Tous',dispo:'Disponibles',loue:'Loués',maint:'Entretien'}[f]}</button>`).join('')}
     </div>
   </div>
-  <div id="veh-grid"><div class="spinner"></div></div>`;
+  <div id="veh-grid"><div class="spinner"></div></div>
+  <!-- Input file global pour upload -->
+  <input type="file" id="global-file-input" accept="image/*" style="display:none;" onchange="_globalFileHandler(this)">
+  <input type="file" id="global-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="_globalFileHandler(this)">`;
 
   try {
     let vehicules = await DB.getVehicules();
@@ -37,10 +40,9 @@ Pages.vehicules = async function(filter = 'all') {
             </div>
             <div class="veh-card-price">${fmt.money(v.tarif_jour)} <span>/ jour · Caution ${fmt.money(v.caution)}</span></div>
             ${v.type_propriete==='sub'?`<div style="font-size:10px;color:var(--gold);margin-top:4px;">Prop: ${v.proprietaires?.nom||'?'} — ${v.taux_reversement}%</div>`:''}
-            <!-- Boutons actions -->
             <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
               <button class="btn btn-outline btn-sm" style="flex:1;font-size:10px;" onclick="openVehiculeDetail('${v.id}')">✏ Détail</button>
-              <button class="btn btn-sm" style="flex:1;font-size:10px;background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.4);color:#f87171;" onclick="openDegatsVehicule('${v.id}','${v.marque} ${v.modele}')">🔴 Dégâts actuels</button>
+              <button class="btn btn-sm" style="flex:1;font-size:10px;background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.4);color:#f87171;" onclick="openDegatsVehicule('${v.id}','${v.marque} ${v.modele}')">🔴 Dégâts</button>
             </div>
           </div>
         </div>`).join('')}</div>`;
@@ -48,6 +50,34 @@ Pages.vehicules = async function(filter = 'all') {
     document.getElementById('veh-grid').innerHTML = `<p style="color:#f87171;">Erreur: ${e.message}</p>`;
   }
 };
+
+// ============================================================
+// GESTIONNAIRE GLOBAL D'UPLOAD (évite problèmes mobile)
+// ============================================================
+window._uploadContext = null;
+
+function _triggerUpload(context, useCamera = false) {
+  window._uploadContext = context;
+  const input = useCamera
+    ? document.getElementById('global-camera-input')
+    : document.getElementById('global-file-input');
+  if (input) { input.value = ''; input.click(); }
+}
+
+async function _globalFileHandler(input) {
+  const file = input.files[0];
+  if (!file || !window._uploadContext) return;
+  const ctx = window._uploadContext;
+
+  if (ctx.type === 'veh-photo') {
+    await _doUploadVehPhoto(ctx.vehiculeId, file);
+  } else if (ctx.type === 'degat-face') {
+    await _doUploadDegaFace(ctx.vehiculeId, ctx.face, file);
+  } else if (ctx.type === 'degat-photo') {
+    await _doUploadDegaPhoto(ctx.degatId, file);
+  }
+  window._uploadContext = null;
+}
 
 // ============================================================
 // DÉGÂTS ACTUELS DU VÉHICULE
@@ -60,61 +90,62 @@ const DEGAT_FACES = {
 };
 
 async function openDegatsVehicule(vehiculeId, vehiculeNom) {
-  // Charger dégâts et photos existants
   const [degats, faces] = await Promise.all([
     DB.getDegatsVehicule(vehiculeId),
     DB.getVehiculeFaces(vehiculeId),
   ]);
-
-  // Construire map des photos de face
   const facePhotos = {};
   faces.forEach(f => { facePhotos[f.face] = f.photo_url; });
+
+  window._degatState = {
+    vehiculeId,
+    vehiculeNom,
+    faceActive: 'front',
+    facePhotos,
+    degats: degats.map(d => ({ ...d })),
+  };
 
   const html = `<div class="modal-overlay" id="modal-degats" onclick="if(event.target===this)closeModal('modal-degats')">
   <div class="modal" style="max-width:900px;">
     <button class="modal-close" onclick="closeModal('modal-degats')">✕</button>
     <div class="modal-title">🔴 Dégâts actuels — ${vehiculeNom}</div>
     
-    <div class="grid-2">
-      <!-- Colonne gauche : schéma -->
-      <div>
-        <!-- Sélection face -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
-          ${Object.entries(DEGAT_FACES).map(([k,v]) => `
-          <button onclick="_degatSetFace('${k}','${vehiculeId}')" id="degat-face-btn-${k}" 
-            class="btn btn-outline btn-sm" style="font-size:10px;padding:6px 4px;${k==='front'?'border-color:var(--gold);color:var(--gold);background:rgba(184,149,42,.1);':''}">
-            ${v.label}
-          </button>`).join('')}
-        </div>
+    <!-- Sélection face -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+      ${Object.entries(DEGAT_FACES).map(([k,v]) => `
+      <button onclick="_degatSetFace('${k}')" id="degat-face-btn-${k}" 
+        class="btn btn-outline btn-sm" 
+        style="font-size:10px;padding:8px 4px;${k==='front'?'border-color:var(--gold);color:var(--gold);background:rgba(184,149,42,.1);':''}">
+        ${v.label}
+      </button>`).join('')}
+    </div>
 
-        <!-- Zone photo -->
-        <div id="degat-photo-zone" style="position:relative;width:100%;background:#141414;border-radius:6px;border:1px solid #2a2a2a;overflow:hidden;min-height:200px;margin-bottom:8px;cursor:crosshair;">
-          <div id="degat-photo-placeholder" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;gap:10px;">
-            <div style="font-size:11px;color:var(--gray);">Aucune photo pour cette face</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
-              <label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:10px;">📁 Choisir<input type="file" accept="image/*" style="display:none;" onchange="_degatUploadFace(this,'${vehiculeId}')"></label>
-              <label class="btn btn-outline btn-sm" style="cursor:pointer;font-size:10px;">📷 Appareil<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="_degatUploadFace(this,'${vehiculeId}')"></label>
-            </div>
+    <div class="grid-2">
+      <!-- Zone photo -->
+      <div>
+        <div id="degat-photo-zone" style="position:relative;width:100%;background:#141414;border-radius:6px;border:1px solid #2a2a2a;overflow:hidden;min-height:200px;margin-bottom:8px;">
+          <div id="degat-placeholder" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;gap:12px;padding:16px;">
+            <div style="font-size:12px;color:var(--gray);text-align:center;">Aucune photo pour cette face<br><span style="font-size:10px;">Ajoutez une photo pour annoter les dégâts</span></div>
+            <button class="btn btn-outline btn-sm" onclick="_triggerUpload({type:'degat-face',vehiculeId:'${vehiculeId}',face:window._degatState.faceActive})">📁 Choisir une photo</button>
+            <button class="btn btn-outline btn-sm" onclick="_triggerUpload({type:'degat-face',vehiculeId:'${vehiculeId}',face:window._degatState.faceActive},true)">📷 Prendre une photo</button>
           </div>
           <img id="degat-face-img" style="display:none;width:100%;height:auto;" draggable="false">
           <div id="degat-markers-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;"></div>
         </div>
-
-        <!-- Boutons photo -->
-        <div id="degat-photo-btns" style="display:none;display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-          <label class="btn btn-outline btn-xs" style="cursor:pointer;font-size:9px;">🔄 Remplacer<input type="file" accept="image/*" style="display:none;" onchange="_degatUploadFace(this,'${vehiculeId}')"></label>
-          <label class="btn btn-outline btn-xs" style="cursor:pointer;font-size:9px;">📷 Appareil<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="_degatUploadFace(this,'${vehiculeId}')"></label>
-          <button class="btn btn-outline btn-xs" onclick="_degatAddMarker('${vehiculeId}')" style="font-size:9px;">+ Ajouter dégât</button>
+        <div id="degat-photo-btns" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+          <button class="btn btn-outline btn-xs" onclick="_triggerUpload({type:'degat-face',vehiculeId:'${vehiculeId}',face:window._degatState.faceActive})">📁 Remplacer</button>
+          <button class="btn btn-outline btn-xs" onclick="_triggerUpload({type:'degat-face',vehiculeId:'${vehiculeId}',face:window._degatState.faceActive},true)">📷 Appareil</button>
+          <button class="btn btn-outline btn-xs" onclick="_degatAddMarker('${vehiculeId}')">+ Ajouter dégât</button>
         </div>
-        <div style="font-size:10px;color:var(--gray);">💡 Cliquez sur la photo · Glissez pour repositionner</div>
+        <div style="font-size:10px;color:var(--gray);">💡 Cliquez sur la photo pour placer un marqueur • Glissez pour repositionner</div>
       </div>
 
-      <!-- Colonne droite : liste dégâts -->
+      <!-- Liste dégâts -->
       <div>
         <div style="font-size:10px;color:var(--gold);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">
-          Liste des dégâts — <span id="degat-face-label">Face avant</span>
+          Dégâts — <span id="degat-face-label">Face avant</span>
         </div>
-        <div id="degat-list" style="max-height:420px;overflow-y:auto;"></div>
+        <div id="degat-list" style="max-height:380px;overflow-y:auto;"></div>
       </div>
     </div>
 
@@ -123,27 +154,16 @@ async function openDegatsVehicule(vehiculeId, vehiculeNom) {
     </div>
   </div></div>
   
-  <!-- Lightbox -->
   <div id="degat-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:99999;align-items:center;justify-content:center;" onclick="this.style.display='none'">
     <img id="degat-lightbox-img" style="max-width:92vw;max-height:90vh;border-radius:4px;border:2px solid var(--gold);">
   </div>`;
 
   openModal(html, 'modal-degats');
-
-  // État global pour ce modal
-  window._degatState = {
-    vehiculeId,
-    faceActive: 'front',
-    facePhotos,
-    degats: degats.map(d => ({ ...d })),
-    dragging: null,
-  };
-
   _degatUpdateDisplay();
   _degatSetupClick(vehiculeId);
 }
 
-function _degatSetFace(face, vehiculeId) {
+function _degatSetFace(face) {
   window._degatState.faceActive = face;
   Object.keys(DEGAT_FACES).forEach(k => {
     const btn = document.getElementById(`degat-face-btn-${k}`);
@@ -155,15 +175,16 @@ function _degatSetFace(face, vehiculeId) {
   const lbl = document.getElementById('degat-face-label');
   if (lbl) lbl.textContent = DEGAT_FACES[face]?.label || face;
   _degatUpdateDisplay();
-  _degatSetupClick(vehiculeId);
+  _degatSetupClick(window._degatState.vehiculeId);
 }
 
 function _degatUpdateDisplay() {
   const s = window._degatState;
   const photo = s.facePhotos[s.faceActive];
   const img = document.getElementById('degat-face-img');
-  const placeholder = document.getElementById('degat-photo-placeholder');
+  const placeholder = document.getElementById('degat-placeholder');
   const btns = document.getElementById('degat-photo-btns');
+
   if (photo) {
     if (img) { img.src = photo; img.style.display = 'block'; }
     if (placeholder) placeholder.style.display = 'none';
@@ -184,6 +205,7 @@ function _degatSetupClick(vehiculeId) {
     const s = window._degatState;
     if (!s.facePhotos[s.faceActive]) return;
     if (evt.target.closest('.degat-marker')) return;
+    if (evt.target.closest('button')) return;
     const rect = zone.getBoundingClientRect();
     const x = ((evt.clientX - rect.left) / rect.width) * 100;
     const y = ((evt.clientY - rect.top) / rect.height) * 100;
@@ -191,14 +213,11 @@ function _degatSetupClick(vehiculeId) {
   };
 }
 
-async function _degatUploadFace(input, vehiculeId) {
-  const file = input.files[0];
-  if (!file) return;
-  toast('Upload en cours...', 'info');
+async function _doUploadDegaFace(vehiculeId, face, file) {
   try {
+    toast('Upload en cours...', 'info');
     const ext = file.name.split('.').pop();
-    const face = window._degatState.faceActive;
-    const path = `${vehiculeId}/face-${face}.${ext}`;
+    const path = `${vehiculeId}/face-${face}-${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from('documents-vehicules').upload(path, file, { upsert: true });
     if (error) throw error;
     const { data: urlData } = supabase.storage.from('documents-vehicules').getPublicUrl(path);
@@ -210,31 +229,24 @@ async function _degatUploadFace(input, vehiculeId) {
   } catch(e) { toast('Erreur: ' + e.message, 'error'); }
 }
 
+async function _degatAddMarker(vehiculeId) {
+  const s = window._degatState;
+  if (!s.facePhotos[s.faceActive]) { toast('Ajoutez d\'abord une photo', 'info'); return; }
+  _degatPlaceMarker(50, 50, vehiculeId);
+}
+
 async function _degatPlaceMarker(x, y, vehiculeId) {
-  const desc = prompt('Description du dégât (ex: Rayure aile avant droite):', '');
+  const desc = prompt('Description du dégât:', '');
   if (desc === null) return;
   const s = window._degatState;
   const maxNum = s.degats.length > 0 ? Math.max(...s.degats.map(d => d.numero)) : 0;
   const newNum = maxNum + 1;
   try {
-    const saved = await DB.saveDegat({
-      vehicule_id: vehiculeId,
-      face: s.faceActive,
-      x, y,
-      numero: newNum,
-      description: desc || `Dégât ${newNum}`,
-      source: 'manuel',
-    });
+    const saved = await DB.saveDegat({ vehicule_id: vehiculeId, face: s.faceActive, x, y, numero: newNum, description: desc || `Dégât ${newNum}`, source: 'manuel' });
     s.degats.push(saved);
     toast('Dégât ajouté ✓', 'success');
     _degatUpdateDisplay();
   } catch(e) { toast('Erreur: ' + e.message, 'error'); }
-}
-
-async function _degatAddMarker(vehiculeId) {
-  const s = window._degatState;
-  if (!s.facePhotos[s.faceActive]) { toast('Ajoutez d\'abord une photo de cette face', 'info'); return; }
-  _degatPlaceMarker(50, 50, vehiculeId);
 }
 
 function _degatRenderMarkers() {
@@ -246,7 +258,7 @@ function _degatRenderMarkers() {
     const marker = document.createElement('div');
     marker.className = 'degat-marker';
     marker.dataset.id = d.id;
-    marker.style.cssText = `position:absolute;left:${d.x}%;top:${d.y}%;width:26px;height:26px;border-radius:50%;background:#C0392B;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;transform:translate(-50%,-50%);cursor:grab;user-select:none;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.5);`;
+    marker.style.cssText = `position:absolute;left:${d.x}%;top:${d.y}%;width:28px;height:28px;border-radius:50%;background:#C0392B;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;transform:translate(-50%,-50%);cursor:grab;user-select:none;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.6);touch-action:none;`;
     marker.textContent = d.numero;
     marker.title = d.description;
     marker.addEventListener('mousedown', _degatStartDrag);
@@ -256,29 +268,28 @@ function _degatRenderMarkers() {
 }
 
 function _degatStartDrag(evt) {
-  evt.stopPropagation();
+  evt.stopPropagation(); evt.preventDefault();
   const marker = evt.currentTarget;
   const id = marker.dataset.id;
   const zone = document.getElementById('degat-photo-zone');
   marker.style.cursor = 'grabbing';
-  const moveHandler = async (e) => {
+  const move = (e) => {
     const rect = zone.getBoundingClientRect();
-    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
-    marker.style.left = x + '%';
-    marker.style.top = y + '%';
+    const x = Math.max(2, Math.min(98, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(2, Math.min(98, ((e.clientY - rect.top) / rect.height) * 100));
+    marker.style.left = x + '%'; marker.style.top = y + '%';
     const d = window._degatState.degats.find(d => d.id === id);
     if (d) { d.x = x; d.y = y; }
   };
-  const upHandler = async () => {
+  const up = async () => {
     marker.style.cursor = 'grab';
     const d = window._degatState.degats.find(d => d.id === id);
     if (d) await DB.saveDegat({ id: d.id, vehicule_id: d.vehicule_id, face: d.face, x: d.x, y: d.y, numero: d.numero, description: d.description }).catch(()=>{});
-    document.removeEventListener('mousemove', moveHandler);
-    document.removeEventListener('mouseup', upHandler);
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
   };
-  document.addEventListener('mousemove', moveHandler);
-  document.addEventListener('mouseup', upHandler);
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
 }
 
 function _degatStartDragTouch(evt) {
@@ -286,23 +297,23 @@ function _degatStartDragTouch(evt) {
   const marker = evt.currentTarget;
   const id = marker.dataset.id;
   const zone = document.getElementById('degat-photo-zone');
-  const moveHandler = (e) => {
+  const move = (e) => {
     const touch = e.touches[0];
     const rect = zone.getBoundingClientRect();
-    const x = Math.max(0, Math.min(100, ((touch.clientX - rect.left) / rect.width) * 100));
-    const y = Math.max(0, Math.min(100, ((touch.clientY - rect.top) / rect.height) * 100));
+    const x = Math.max(2, Math.min(98, ((touch.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(2, Math.min(98, ((touch.clientY - rect.top) / rect.height) * 100));
     marker.style.left = x + '%'; marker.style.top = y + '%';
     const d = window._degatState.degats.find(d => d.id === id);
     if (d) { d.x = x; d.y = y; }
   };
-  const endHandler = async () => {
+  const end = async () => {
     const d = window._degatState.degats.find(d => d.id === id);
     if (d) await DB.saveDegat({ id: d.id, vehicule_id: d.vehicule_id, face: d.face, x: d.x, y: d.y, numero: d.numero, description: d.description }).catch(()=>{});
-    document.removeEventListener('touchmove', moveHandler);
-    document.removeEventListener('touchend', endHandler);
+    document.removeEventListener('touchmove', move);
+    document.removeEventListener('touchend', end);
   };
-  document.addEventListener('touchmove', moveHandler, { passive: false });
-  document.addEventListener('touchend', endHandler);
+  document.addEventListener('touchmove', move, { passive: false });
+  document.addEventListener('touchend', end);
 }
 
 function _degatRenderList() {
@@ -310,9 +321,9 @@ function _degatRenderList() {
   if (!el) return;
   const s = window._degatState;
   const faceDegats = s.degats.filter(d => d.face === s.faceActive);
-  const allDegats = s.degats;
-  if (allDegats.length === 0) {
-    el.innerHTML = '<p style="color:var(--gray);font-size:12px;text-align:center;padding:16px;">Aucun dégât enregistré pour ce véhicule</p>';
+  const total = s.degats.length;
+  if (total === 0) {
+    el.innerHTML = '<p style="color:var(--gray);font-size:12px;text-align:center;padding:16px;">Aucun dégât enregistré</p>';
     return;
   }
   el.innerHTML = (faceDegats.length === 0
@@ -320,28 +331,26 @@ function _degatRenderList() {
     : faceDegats.map(d => `
     <div style="background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.2);border-radius:3px;padding:8px 10px;margin-bottom:6px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <div style="width:22px;height:22px;border-radius:50%;background:#C0392B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">${d.numero}</div>
-        <div style="flex:1;">
-          <input value="${d.description||''}" placeholder="Description..."
-            onchange="_degatUpdateDesc('${d.id}', this.value)"
-            style="width:100%;background:#111;border:1px solid #2a2a2a;border-radius:2px;padding:4px 8px;color:#ccc;font-size:11px;outline:none;">
-        </div>
-        <button onclick="_degatDelete('${d.id}')" style="background:none;border:none;color:#555;cursor:pointer;font-size:18px;line-height:1;">×</button>
+        <div style="width:24px;height:24px;border-radius:50%;background:#C0392B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">${d.numero}</div>
+        <input value="${(d.description||'').replace(/'/g,"&#39;")}" placeholder="Description..."
+          onchange="_degatUpdateDesc('${d.id}', this.value)"
+          style="flex:1;background:#111;border:1px solid #2a2a2a;border-radius:2px;padding:5px 8px;color:#ccc;font-size:12px;outline:none;">
+        <button onclick="_degatDelete('${d.id}')" style="background:none;border:none;color:#555;cursor:pointer;font-size:20px;line-height:1;flex-shrink:0;">×</button>
       </div>
-      ${d.source === 'retour' ? `<div style="font-size:9px;color:#fb923c;margin-bottom:6px;">⚠ Constaté au retour ${d.reservation_id||''}</div>` : ''}
+      ${d.source==='retour'?`<div style="font-size:9px;color:#fb923c;margin-bottom:5px;">⚠ Retour ${d.reservation_id||''}</div>`:''}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         ${d.photo_url
           ? `<img src="${d.photo_url}" onclick="document.getElementById('degat-lightbox-img').src='${d.photo_url}';document.getElementById('degat-lightbox').style.display='flex';" style="width:60px;height:45px;object-fit:cover;border-radius:3px;cursor:pointer;border:1px solid var(--gold);">
              <button onclick="_degatDeletePhoto('${d.id}')" class="btn btn-xs btn-outline" style="color:#f87171;border-color:#f87171;">🗑</button>`
-          : `<label class="btn btn-xs btn-outline" style="cursor:pointer;font-size:9px;">📷 Photo<input type="file" accept="image/*" style="display:none;" onchange="_degatUploadPhoto('${d.id}', this)"></label>
-             <label class="btn btn-xs btn-outline" style="cursor:pointer;font-size:9px;">📸 Appareil<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="_degatUploadPhoto('${d.id}', this)"></label>`}
+          : `<button class="btn btn-xs btn-outline" onclick="_triggerUpload({type:'degat-photo',degatId:'${d.id}'})">📁 Photo</button>
+             <button class="btn btn-xs btn-outline" onclick="_triggerUpload({type:'degat-photo',degatId:'${d.id}'},true)">📷 Appareil</button>`}
       </div>
     </div>`).join('')) +
-    (allDegats.length > faceDegats.length ? `<div style="font-size:10px;color:var(--gray);text-align:center;padding:8px;">${allDegats.length - faceDegats.length} dégât(s) sur d'autres faces</div>` : '');
+    (total > faceDegats.length ? `<div style="font-size:10px;color:var(--gray);text-align:center;padding:8px;">${total - faceDegats.length} dégât(s) sur d'autres faces</div>` : '');
 }
 
 async function _degatUpdateDesc(id, desc) {
-  const d = window._degatState.degats.find(x => x.id === id);
+  const d = window._degatState?.degats.find(x => x.id === id);
   if (d) {
     d.description = desc;
     await DB.saveDegat({ id, vehicule_id: d.vehicule_id, face: d.face, x: d.x, y: d.y, numero: d.numero, description: desc }).catch(()=>{});
@@ -358,12 +367,10 @@ async function _degatDelete(id) {
   } catch(e) { toast('Erreur: ' + e.message, 'error'); }
 }
 
-async function _degatUploadPhoto(degatId, input) {
-  const file = input.files[0];
-  if (!file) return;
+async function _doUploadDegaPhoto(degatId, file) {
   const reader = new FileReader();
   reader.onload = async function(e) {
-    const d = window._degatState.degats.find(x => x.id === degatId);
+    const d = window._degatState?.degats.find(x => x.id === degatId);
     if (d) {
       d.photo_url = e.target.result;
       await DB.saveDegat({ id: degatId, vehicule_id: d.vehicule_id, face: d.face, x: d.x, y: d.y, numero: d.numero, description: d.description, photo_url: e.target.result }).catch(()=>{});
@@ -375,7 +382,7 @@ async function _degatUploadPhoto(degatId, input) {
 }
 
 async function _degatDeletePhoto(degatId) {
-  const d = window._degatState.degats.find(x => x.id === degatId);
+  const d = window._degatState?.degats.find(x => x.id === degatId);
   if (d) {
     d.photo_url = null;
     await DB.saveDegat({ id: degatId, vehicule_id: d.vehicule_id, face: d.face, x: d.x, y: d.y, numero: d.numero, description: d.description, photo_url: null }).catch(()=>{});
@@ -394,18 +401,15 @@ async function openVehiculeDetail(id) {
     <div style="display:flex;gap:18px;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;">
       <div style="width:160px;height:110px;background:var(--dark3);border-radius:4px;overflow:hidden;flex-shrink:0;position:relative;border:1px solid #2a2a2a;">
         ${v.photo_url ? `<img src="${v.photo_url}" style="width:100%;height:100%;object-fit:cover;">` : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:32px;opacity:.3;">🚗</div>`}
-        <label style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.75);border:1px solid var(--gold);color:var(--gold);padding:3px 7px;border-radius:2px;font-size:9px;cursor:pointer;">
-          📷<input type="file" accept="image/*" style="display:none;" onchange="_uploadVehPhoto('${v.id}', this)">
-        </label>
-        <label style="position:absolute;bottom:4px;left:4px;background:rgba(0,0,0,.75);border:1px solid #555;color:#aaa;padding:3px 7px;border-radius:2px;font-size:9px;cursor:pointer;">
-          📸<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="_uploadVehPhoto('${v.id}', this)">
-        </label>
       </div>
-      <div>
+      <div style="flex:1;">
         <div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;">${v.marque} ${v.modele}</div>
         <div style="margin-top:4px;">${pillVeh(v.statut)}</div>
         <div style="font-size:28px;font-family:'Cormorant Garamond',serif;color:var(--gold);font-weight:700;margin-top:8px;">${fmt.km(v.km_actuel)}</div>
-        <div style="font-size:10px;color:var(--gray);">Kilométrage actuel</div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="_triggerUploadVeh('${v.id}')">📁 Photo véhicule</button>
+          <button class="btn btn-outline btn-sm" onclick="_triggerUploadVehCamera('${v.id}')">📷 Appareil</button>
+        </div>
       </div>
     </div>
     <table class="tbl"><tbody>
@@ -420,17 +424,25 @@ async function openVehiculeDetail(id) {
     </div>
   </div></div>`;
   openModal(html, 'modal-veh-detail');
+  window._currentVehId = v.id;
 }
 
-async function _uploadVehPhoto(vehiculeId, input) {
-  const file = input.files[0];
-  if (!file) return;
+function _triggerUploadVeh(vid) {
+  window._currentVehId = vid;
+  _triggerUpload({ type: 'veh-photo', vehiculeId: vid });
+}
+function _triggerUploadVehCamera(vid) {
+  window._currentVehId = vid;
+  _triggerUpload({ type: 'veh-photo', vehiculeId: vid }, true);
+}
+
+async function _doUploadVehPhoto(vehiculeId, file) {
   try {
     toast('Upload en cours...', 'info');
     const ext = file.name.split('.').pop();
     const path = `${vehiculeId}/photo-principale.${ext}`;
-    const { error: uploadError } = await supabase.storage.from('documents-vehicules').upload(path, file, { upsert: true });
-    if (uploadError) throw uploadError;
+    const { error } = await supabase.storage.from('documents-vehicules').upload(path, file, { upsert: true });
+    if (error) throw error;
     const { data: urlData } = supabase.storage.from('documents-vehicules').getPublicUrl(path);
     await supabase.from('vehicules').update({ photo_url: urlData.publicUrl + '?t=' + Date.now() }).eq('id', vehiculeId);
     toast('Photo mise à jour ✓', 'success');
