@@ -272,7 +272,7 @@ async function _saveResa() {
       date_operation: depart.split('T')[0],
       libelle: `Location ${id}`,
       categorie: 'Location', reference: id,
-      credit: tarif * days, reservation_id: id, vehicule_id: vid
+      credit: tarif * days, vehicule_id: vid
     });
     // Facture auto
     const fid = await DB.nextFactureId();
