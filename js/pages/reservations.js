@@ -252,11 +252,18 @@ async function _saveResa() {
 
   try {
     setSyncStatus('syncing');
+    console.log('[LKB] Creating reservation...');
     const id = await DB.nextReservationId();
-    await DB.saveReservation({
-      id, vehicule_id: vid, client_id: clientId,
-      date_depart: depart, date_retour_prevue: retour,
-      tarif_jour: tarif, total_prevu: tarif * days,
+    console.log('[LKB] New reservation ID:', id);
+    
+    const resData = {
+      id,
+      vehicule_id: vid,
+      client_id: clientId,
+      date_depart: depart,
+      date_retour_prevue: retour,
+      tarif_jour: tarif,
+      total_prevu: tarif * days,
       caution: parseFloat(document.getElementById('rf-caution').value)||0,
       km_limite: parseInt(document.getElementById('rf-kmlimit').value)||300,
       km_supplement_eur: parseFloat(document.getElementById('rf-kmsup').value)||2.5,
@@ -264,26 +271,52 @@ async function _saveResa() {
       mode_paiement: document.getElementById('rf-paiement').value,
       notes: document.getElementById('rf-notes').value,
       statut: 'active'
-    });
+    };
+    console.log('[LKB] Reservation data:', resData);
+    
+    // Sauvegarder directement avec supabase pour voir l'erreur exacte
+    const { data: savedRes, error: resError } = await supabase
+      .from('reservations')
+      .insert(resData)
+      .select();
+    
+    if (resError) {
+      console.error('[LKB] Reservation save error:', resError);
+      throw new Error('Réservation: ' + resError.message);
+    }
+    console.log('[LKB] Reservation saved:', savedRes);
+    
     // Mettre véhicule en "loué"
-    await supabase.from('vehicules').update({ statut: 'loue' }).eq('id', vid);
+    const { error: vehError } = await supabase.from('vehicules').update({ statut: 'loue' }).eq('id', vid);
+    if (vehError) console.error('[LKB] Vehicle update error:', vehError);
+    
     // Écriture comptable
-    await DB.addEcriture({
-      date_operation: depart.split('T')[0],
-      libelle: `Location ${id}`,
-      categorie: 'Location', reference: id,
-      credit: tarif * days, vehicule_id: vid
-    });
+    try {
+      await DB.addEcriture({
+        date_operation: depart.split('T')[0],
+        libelle: `Location ${id}`,
+        categorie: 'Location', reference: id,
+        credit: tarif * days, vehicule_id: vid
+      });
+    } catch(ecErr) { console.error('[LKB] Ecriture error:', ecErr); }
+    
     // Facture auto
-    const fid = await DB.nextFactureId();
-    const ht = Math.round(tarif * days / 1.2 * 100) / 100;
-    const tva = Math.round((tarif * days - ht) * 100) / 100;
-    await DB.saveFacture({ id: fid, reservation_id: id, client_id: clientId, montant_ht: ht, tva, montant_ttc: tarif * days, statut: 'emise', mode_paiement: document.getElementById('rf-paiement').value });
+    try {
+      const fid = await DB.nextFactureId();
+      const ht = Math.round(tarif * days / 1.2 * 100) / 100;
+      const tva = Math.round((tarif * days - ht) * 100) / 100;
+      await DB.saveFacture({ id: fid, reservation_id: id, client_id: clientId, montant_ht: ht, tva, montant_ttc: tarif * days, statut: 'emise', mode_paiement: document.getElementById('rf-paiement').value });
+    } catch(facErr) { console.error('[LKB] Facture error:', facErr); }
+    
     setSyncStatus('synced');
     closeModal('modal-resa');
     toast(`Contrat ${id} créé !`, 'success');
     Pages.reservations();
-  } catch(e) { setSyncStatus('offline'); toast('Erreur: ' + e.message, 'error'); }
+  } catch(e) {
+    console.error('[LKB] Save reservation error:', e);
+    setSyncStatus('offline');
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 // ============================================================
